@@ -230,28 +230,24 @@ import Swal from 'sweetalert2';
                 </div>
               </div>
 
+              <!-- Indicador de IMC Calculado en Tiempo Real (HU028) -->
+              @if (calculatedImc !== null) {
+                <div class="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                  <span class="text-slate-600 font-medium">
+                    Índice de Masa Corporal (IMC): <strong class="text-slate-900 font-bold font-mono">{{ calculatedImc }}</strong>
+                  </span>
+                  <span
+                    [ngClass]="isObese ? 'bg-amber-100 text-amber-800 border-amber-300 font-bold' : 'bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold'"
+                    class="px-2.5 py-1 rounded-full border text-[11px]"
+                  >
+                    {{ isObese ? '⚠️ Obesidad detectada (IMC ≥ 30.0)' : '✓ Sin obesidad (IMC < 30.0)' }}
+                  </span>
+                </div>
+              }
+
               <!-- Factores y Síntomas (Botones Segmentados SÍ / NO) -->
               <h4 class="text-xs font-bold uppercase tracking-wider text-slate-800 pt-2">Factores y síntomas</h4>
-              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <!-- Obesidad -->
-                <div>
-                  <span class="block text-xs font-semibold text-slate-600 mb-1">Obesidad</span>
-                  <div class="flex rounded-xl bg-slate-100 p-1 border border-slate-200">
-                    <button
-                      type="button"
-                      (click)="obesidad = true"
-                      [ngClass]="obesidad ? 'bg-brand text-white shadow-xs font-bold' : 'text-slate-500 font-medium'"
-                      class="flex-1 py-1 text-xs rounded-lg transition"
-                    >SÍ</button>
-                    <button
-                      type="button"
-                      (click)="obesidad = false"
-                      [ngClass]="!obesidad ? 'bg-white text-slate-800 shadow-xs font-bold' : 'text-slate-500 font-medium'"
-                      class="flex-1 py-1 text-xs rounded-lg transition"
-                    >NO</button>
-                  </div>
-                </div>
-
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <!-- Fuma -->
                 <div>
                   <span class="block text-xs font-semibold text-slate-600 mb-1">Fuma</span>
@@ -312,7 +308,7 @@ import Swal from 'sweetalert2';
 
               <!-- Enfermedades Previas (Checkboxes) -->
               <h4 class="text-xs font-bold uppercase tracking-wider text-slate-800 pt-2">Enfermedades Previas</h4>
-              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <label class="flex items-center space-x-2 text-xs font-semibold text-slate-700 cursor-pointer">
                   <input
                     type="checkbox"
@@ -336,14 +332,6 @@ import Swal from 'sweetalert2';
                     class="w-4 h-4 text-brand rounded focus:ring-brand accent-brand border-slate-300"
                   />
                   <span>ACV</span>
-                </label>
-                <label class="flex items-center space-x-2 text-xs font-semibold text-slate-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    [(ngModel)]="tiroides"
-                    class="w-4 h-4 text-brand rounded focus:ring-brand accent-brand border-slate-300"
-                  />
-                  <span>Tiroides</span>
                 </label>
               </div>
             </div>
@@ -400,7 +388,6 @@ export class NewPatientModalComponent {
   pesoKg: number | null = null;
   tallaCm: number | null = null;
 
-  obesidad = false;
   tabaquismo = false;
   consumoAlcohol = false;
   antecedentesCv = false;
@@ -408,7 +395,33 @@ export class NewPatientModalComponent {
   diabetes = false;
   hipertension = false;
   acv = false;
-  tiroides = false;
+
+  private _overrideObesidad: boolean | null = null;
+
+  get calculatedImc(): number | null {
+    if (!this.pesoKg || !this.tallaCm || this.tallaCm <= 0 || this.pesoKg <= 0) {
+      return null;
+    }
+    const tallaMetros = Number(this.tallaCm) / 100;
+    const imc = Number(this.pesoKg) / (tallaMetros * tallaMetros);
+    return Number(imc.toFixed(1));
+  }
+
+  get isObese(): boolean {
+    const imc = this.calculatedImc;
+    return imc !== null && imc >= 30.0;
+  }
+
+  get obesidad(): boolean {
+    if (this._overrideObesidad !== null) {
+      return this._overrideObesidad;
+    }
+    return this.isObese;
+  }
+
+  set obesidad(val: boolean) {
+    this._overrideObesidad = val;
+  }
 
   checkDniUniqueness(): void {
     if (this.dni && this.dni.trim().length === 8) {
@@ -477,7 +490,6 @@ export class NewPatientModalComponent {
       diabetes: this.diabetes,
       hipertension: this.hipertension,
       acv: this.acv,
-      tiroides: this.tiroides,
       frecuenciaMin: this.settingsService.getDefaultMinBpm(),
       frecuenciaMax: this.settingsService.getDefaultMaxBpm()
     }).subscribe({

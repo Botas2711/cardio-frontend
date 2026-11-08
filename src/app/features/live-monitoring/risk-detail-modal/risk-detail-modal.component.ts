@@ -222,6 +222,7 @@ export class RiskDetailModalComponent {
   @Input() patient: Patient | null = null;
   @Input() liveData: TelemetryLive | null = null;
   @Input() currentPulse: number = 110;
+  @Input() alertScore: number | null = null;
   @Output() closeModal = new EventEmitter<void>();
 
   private reportService = inject(ReportService);
@@ -247,16 +248,27 @@ export class RiskDetailModalComponent {
     return 31.0;
   }
 
-  // Algoritmo de Simulación Predictiva Clínica (SHAP & Biomarcadores)
+  // Score de Riesgo Clínico (Congelado de la Alerta o Inferencia Real de Voting Ensemble)
   get riskScore(): number {
-    // Si viene scoreRiesgo del backend (ej. 0.82 o 0.96)
-    if (this.liveData?.scoreRiesgo && this.liveData.scoreRiesgo > 0) {
-      return Math.min(99, Math.round(Number(this.liveData.scoreRiesgo) * 100));
+    // 0. Prioridad estricta: Score con el que se generó la alerta clínica evaluada
+    if (this.alertScore !== null && this.alertScore !== undefined && this.alertScore > 0) {
+      return this.alertScore;
     }
 
-    let score = 15; // Calibración basal
+    // 1. Prioridad: Score analítico real emitido por el microservicio FastAPI
+    if (this.liveData?.scoreRiesgo !== undefined && this.liveData?.scoreRiesgo !== null && Number(this.liveData.scoreRiesgo) > 0) {
+      const score = Number(this.liveData.scoreRiesgo);
+      if (score <= 1.0) {
+        return Math.min(99, Math.max(1, Math.round(score * 100)));
+      }
+      return Math.min(99, Math.max(1, Math.round(score)));
+    }
 
-    // 1. Incidencia de Frecuencia Cardíaca
+    if (this.liveData?.nivelRiesgo === 'CRITICO') return 88;
+    if (this.liveData?.nivelRiesgo === 'MODERADO') return 60;
+
+    // 2. Respaldo basal cuando no hay telemetría en vivo conectada
+    let score = 15;
     const bpm = this.currentBpm;
     const maxBpm = this.patient?.frecuenciaMax || 100;
     const minBpm = this.patient?.frecuenciaMin || 60;
@@ -270,7 +282,6 @@ export class RiskDetailModalComponent {
       score += 5;
     }
 
-    // 2. Incidencia de IMC
     const imc = this.patientImc;
     if (imc >= 30) {
       score += Math.min(24, Math.round(18 + (imc - 30) * 1.5));
@@ -280,25 +291,10 @@ export class RiskDetailModalComponent {
       score += 2;
     }
 
-    // 3. Incidencia de Diabetes
-    if (this.patient?.diabetes) {
-      score += 18;
-    }
-
-    // 4. Incidencia de Tabaquismo
-    if (this.patient?.tabaquismo) {
-      score += 14;
-    }
-
-    // 5. Incidencia de Hipertensión
-    if (this.patient?.hipertension) {
-      score += 10;
-    }
-
-    // 6. Incidencia de Edad avanzada
-    if (this.patient?.edad && this.patient.edad > 60) {
-      score += 6;
-    }
+    if (this.patient?.diabetes) score += 18;
+    if (this.patient?.tabaquismo) score += 14;
+    if (this.patient?.hipertension) score += 10;
+    if (this.patient?.edad && this.patient.edad > 60) score += 6;
 
     return Math.min(99, Math.max(15, score));
   }

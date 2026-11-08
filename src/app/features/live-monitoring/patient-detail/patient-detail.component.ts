@@ -1,13 +1,16 @@
 import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef, ElementRef, ViewChild, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { PatientService } from '../../../services/patient.service';
 import { TelemetryService } from '../../../services/telemetry.service';
 import { ReportService } from '../../../services/report.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { SettingsService } from '../../../core/services/settings.service';
+import { NotificationService } from '../../../core/services/notification.service';
 import { ProcessMiningService } from '../../../services/process-mining.service';
+import { environment } from '../../../../environments/environment';
 import { Patient } from '../../../models/patient.model';
 import { TelemetryLive } from '../../../models/telemetry.model';
 import { RiskDetailModalComponent } from '../risk-detail-modal/risk-detail-modal.component';
@@ -83,7 +86,89 @@ interface CalendarDay {
       <!-- ============================================================== -->
       <!-- PESTAÑA 1: MONITOREO (patient-monitoring.png / patient-monitoring-1.png / no-device-link.png) -->
       <!-- ============================================================== -->
-      <div [class.hidden]="activeTab !== 'monitoreo'" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div [class.hidden]="activeTab !== 'monitoreo'" class="space-y-6">
+        @if (hasCriticalAlert) {
+          <!-- Tarjeta Destacada de Alerta Crítica y Descarga de Informe Médico PDF (Persiste visible aunque baje la PPM) -->
+          <div class="bg-gradient-to-r from-rose-50 via-white to-rose-50/40 border-2 border-brand/30 rounded-3xl p-5 sm:p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 relative">
+            <div class="flex items-start space-x-4 min-w-0">
+              <div class="w-12 h-12 rounded-2xl bg-brand text-white flex items-center justify-center shrink-0 shadow-md">
+                <svg class="w-6 h-6 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center space-x-2 flex-wrap gap-1">
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-brand text-white">
+                    Alerta Crítica Generada
+                  </span>
+                  @if (hasDoctorDownloadedReport) {
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      ✓ Informe Descargado
+                    </span>
+                  }
+                  <span class="text-xs font-bold text-slate-500 font-mono">
+                    {{ (pendingReviewAlert?.fechaHora || activeCriticalAlert?.fechaHora) ? formatLiveTime(pendingReviewAlert?.fechaHora || activeCriticalAlert?.fechaHora) : 'En Vivo' }}
+                  </span>
+                </div>
+                <h4 class="text-base font-black text-slate-900 mt-1">
+                  {{ criticalAlertTitle }} — {{ criticalAlertPulse }}
+                </h4>
+                <p class="text-xs text-slate-600 mt-0.5 font-medium leading-relaxed max-w-2xl">
+                  {{ criticalAlertReason }}
+                </p>
+              </div>
+            </div>
+
+            <!-- Botones de Acción: Descargar Informe PDF + Ver SHAP + Atender + Cerrar -->
+            <div class="flex items-center space-x-2.5 shrink-0 flex-wrap gap-2">
+              <button
+                type="button"
+                (click)="downloadCriticalAlertPdf()"
+                [disabled]="isDownloadingAlertPdf"
+                class="px-4 py-2.5 rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-xs shadow-md transition flex items-center space-x-2 active:scale-95 cursor-pointer disabled:opacity-50"
+                title="Descargar informe consolidado de la alerta clínica en formato PDF"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <span>{{ isDownloadingAlertPdf ? 'Generando PDF...' : 'Descargar Informe de Alerta (PDF)' }}</span>
+              </button>
+
+              <button
+                type="button"
+                (click)="openRiskDetail()"
+                class="px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-2xs transition active:scale-95 cursor-pointer"
+                title="Ver explicabilidad clínica SHAP"
+              >
+                Ver Detalle / SHAP
+              </button>
+
+              @if ((activeCriticalAlert && !activeCriticalAlert.atendida) || (pendingReviewAlert && !pendingReviewAlert.atendida)) {
+                <button
+                  type="button"
+                  (click)="attendCriticalAlert(activeCriticalAlert?.idAlerta || pendingReviewAlert?.idAlerta)"
+                  class="px-3.5 py-2.5 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs transition active:scale-95 cursor-pointer"
+                  title="Marcar alerta como atendida"
+                >
+                  Marcar Atendida
+                </button>
+              }
+
+              <button
+                type="button"
+                (click)="dismissAlertBanner()"
+                class="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                title="Cerrar aviso de alerta"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        }
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <!-- Columna Izquierda: Gráfico Clínico de Curva Cardíaca en Tiempo Real -->
           <div class="lg:col-span-2 bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs flex flex-col justify-between min-h-[460px]">
             <!-- Encabezado de la Tarjeta -->
@@ -96,28 +181,22 @@ interface CalendarDay {
                 <h3 class="text-base font-bold text-slate-900">Frecuencia Cardíaca en Tiempo Real</h3>
               </div>
 
-              <!-- Badges de Estado y Botón Ver Detalle -->
+              <!-- Badges de Estado en Tiempo Real -->
               <div class="flex items-center space-x-3">
                 @if (isOnline) {
                   @if (isHighRisk) {
-                    <!-- Estado Riesgo Alto (patient-monitoring-1.png) -->
+                    <!-- Estado Riesgo Alto -->
                     <span class="inline-flex items-center px-3.5 py-1.5 rounded-full text-xs font-bold text-brand bg-rose-50 border border-rose-100">
                       {{ currentPulse }} BPM — Alto
                     </span>
-                    <button
-                      (click)="openRiskDetail()"
-                      class="bg-brand hover:bg-brand-dark text-white px-4 py-1.5 rounded-xl font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
-                    >
-                      Ver Detalle
-                    </button>
                   } @else {
-                    <!-- Estado Estable (patient-monitoring.png) -->
+                    <!-- Estado Estable -->
                     <span class="inline-flex items-center px-3.5 py-1.5 rounded-full text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100">
                       {{ currentPulse }} BPM — Estable
                     </span>
                   }
                 } @else {
-                  <!-- Estado Desconectado (no-device-link.png) -->
+                  <!-- Estado Desconectado -->
                   <span class="inline-flex items-center px-3.5 py-1.5 rounded-full text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200">
                     -- BPM — Desconectado
                   </span>
@@ -217,6 +296,7 @@ interface CalendarDay {
             </div>
           </div>
         </div>
+      </div>
 
       <!-- ============================================================== -->
       <!-- PESTAÑA 2: HISTORIAL (history-tab.png / history-calendar.png / history-range.png / historic-sin datos.png) -->
@@ -555,6 +635,7 @@ interface CalendarDay {
         [patient]="patient"
         [liveData]="liveData"
         [currentPulse]="snapshotRiskPulse"
+        [alertScore]="snapshotRiskScore"
         (closeModal)="closeRiskDetail()"
       ></app-risk-detail-modal>
     }
@@ -570,8 +651,17 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   private reportService = inject(ReportService);
   private authService = inject(AuthService);
   private settingsService = inject(SettingsService);
+  private notificationService = inject(NotificationService);
   private processMiningService = inject(ProcessMiningService);
+  private http = inject(HttpClient);
   private cdr = inject(ChangeDetectorRef);
+
+  activeCriticalAlert: any | null = null;
+  pendingReviewAlert: any | null = null;
+  targetAlertId: number | null = null;
+  isDownloadingAlertPdf = false;
+  hasDoctorDownloadedReport = false;
+  isAlertBannerDismissed = false;
 
   getDoctorDisplayName(): string {
     const user = this.authService.currentUser();
@@ -605,6 +695,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
         this.fetchLive();
         this.initOrUpdateLiveChart();
       } else if (tab === 'historial') {
+        this.loadRealHistory(this.selectedStartDate, this.selectedEndDate);
         this.renderHistoryChart();
       }
     }, 40);
@@ -613,6 +704,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   isOnline = false;
   currentPulse = 72;
   snapshotRiskPulse = 110;
+  snapshotRiskScore = 88;
   showRiskDetailModal = false;
 
   // Notas Clínicas
@@ -622,7 +714,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   // Pestaña Historial y Calendario Dinámico
   showCalendarPopover = false;
   isDateFilterActive = false;
-  activeDateRangeLabel = 'Últimos 7 días';
+  activeDateRangeLabel = 'Últimos 10 días';
   tempSelectedRangeLabel = 'Seleccionar rango';
 
   currentMonth = new Date().getMonth();
@@ -661,7 +753,9 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
   }
 
   openRiskDetail(): void {
-    this.snapshotRiskPulse = this.currentPulse;
+    // Congelar fielmente los valores exactos con los que se generó la alerta clínica
+    this.snapshotRiskPulse = this.alertPulseValue;
+    this.snapshotRiskScore = this.alertScoreValue;
     this.showRiskDetailModal = true;
   }
 
@@ -695,7 +789,17 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
       this.loadClinicalNotes();
       this.startLiveTelemetry();
       this.startWaveAnimation();
+      this.loadPatientAlerts();
     });
+
+    if (this.route?.queryParams) {
+      this.route.queryParams.subscribe(queryParams => {
+        if (queryParams && queryParams['alertaId']) {
+          this.targetAlertId = +queryParams['alertaId'];
+        }
+        this.loadPatientAlerts();
+      });
+    }
   }
 
   ngOnDestroy(): void {
@@ -731,6 +835,14 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     });
   }
 
+  private toLocalDateStr(dateInput: string | Date): string {
+    const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
   loadRealHistory(inicio?: string, fin?: string): void {
     this.telemetryService.getHistorical(this.patientId, 'DIARIO', inicio, fin).subscribe({
       next: res => {
@@ -739,9 +851,9 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
           const maxT = this.patient?.frecuenciaMax || 100;
           const minT = this.patient?.frecuenciaMin || 60;
 
-          // Verificar si todas las mediciones corresponden a un mismo día
-          const firstDate = res.mediciones[0].fechaHora.substring(0, 10);
-          const isSingleDay = res.mediciones.every(m => m.fechaHora.substring(0, 10) === firstDate);
+          // Verificar si todas las mediciones corresponden a un mismo día local
+          const firstDate = this.toLocalDateStr(res.mediciones[0].fechaHora);
+          const isSingleDay = res.mediciones.every(m => this.toLocalDateStr(m.fechaHora) === firstDate);
 
           if (isSingleDay) {
             // Vista intradía: muestrear lecturas cronológicas para visualización clínica óptima
@@ -754,18 +866,18 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
               const dateObj = new Date(m.fechaHora);
               const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
               return {
-                fecha: m.fechaHora.substring(0, 10),
+                fecha: this.toLocalDateStr(m.fechaHora),
                 label: timeStr,
                 pulsoPpm: m.pulsoPpm,
-                esAlerta: m.nivelRiesgo === 'CRITICO' || m.nivelRiesgo === 'MODERADO' || m.pulsoPpm > maxT || m.pulsoPpm < minT
+                esAlerta: m.nivelRiesgo === 'CRITICO' || m.nivelRiesgo === 'MODERADO' || m.pulsoPpm > 100 || m.pulsoPpm > maxT || m.pulsoPpm < minT
               };
             });
           } else {
-            // Vista multidiaria: agrupar por fecha calendario (YYYY-MM-DD)
+            // Vista multidiaria: agrupar por fecha calendario local (YYYY-MM-DD)
             const mapByDay = new Map<string, { totalPpm: number; count: number; maxPpm: number; hasAlert: boolean; dateObj: Date }>();
             for (const m of res.mediciones) {
-              const dateKey = m.fechaHora.substring(0, 10);
-              const isAlert = m.nivelRiesgo === 'CRITICO' || m.nivelRiesgo === 'MODERADO' || m.pulsoPpm > maxT || m.pulsoPpm < minT;
+              const dateKey = this.toLocalDateStr(m.fechaHora);
+              const isAlert = m.nivelRiesgo === 'CRITICO' || m.nivelRiesgo === 'MODERADO' || m.pulsoPpm > 100 || m.pulsoPpm > maxT || m.pulsoPpm < minT;
               if (!mapByDay.has(dateKey)) {
                 mapByDay.set(dateKey, {
                   totalPpm: m.pulsoPpm,
@@ -791,7 +903,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
                 fecha: dateStr,
                 label: `${day} ${shortMonths[monthIdx] || 'Oct'}`,
                 pulsoPpm: avgPpm,
-                esAlerta: entry.hasAlert || avgPpm > maxT || avgPpm < minT
+                esAlerta: entry.hasAlert || avgPpm > 100 || avgPpm > maxT || avgPpm < minT
               };
             });
           }
@@ -820,7 +932,9 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     if (!this.isDateFilterActive) return this.allHistoryRecords;
 
     return this.allHistoryRecords.filter(r => {
-      return r.fecha >= this.selectedStartDate && r.fecha <= this.selectedEndDate;
+      const matchStart = !this.selectedStartDate || r.fecha >= this.selectedStartDate;
+      const matchEnd = !this.selectedEndDate || r.fecha <= this.selectedEndDate;
+      return matchStart && matchEnd;
     });
   }
 
@@ -965,7 +1079,7 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     this.tempRangeEnd = null;
     this.selectedStartDate = '';
     this.selectedEndDate = '';
-    this.activeDateRangeLabel = 'Últimos 7 días';
+    this.activeDateRangeLabel = 'Últimos 10 días';
     this.tempSelectedRangeLabel = 'Seleccionar rango';
     this.loadRealHistory();
   }
@@ -980,10 +1094,16 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
     }
   }
 
+  private livePollCounter = 0;
+
   startLiveTelemetry(): void {
     this.fetchLive();
     this.pollInterval = setInterval(() => {
       this.fetchLive();
+      this.livePollCounter++;
+      if (this.livePollCounter % 4 === 0) {
+        this.loadPatientAlerts();
+      }
     }, 2000);
   }
 
@@ -992,13 +1112,42 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
       next: data => {
         this.liveData = data;
         const hasPulse = data.pulsoPpm !== undefined && data.pulsoPpm !== null && data.pulsoPpm > 0;
-        const isWaiting = Boolean(data.esperandoLecturas);
-        const isSensorOk = data.sensorConectado !== false;
+        const isExplicitDisconnect = data.dispositivoNombre === 'Desconectado' || (!hasPulse && data.sensorConectado === false && this.currentPulse <= 0);
 
-        this.isOnline = !isWaiting && hasPulse && isSensorOk;
+        if (hasPulse && data.pulsoPpm !== undefined) {
+          this.currentPulse = Number(data.pulsoPpm);
+          this.isOnline = true;
+        } else if (!isExplicitDisconnect && this.currentPulse > 0) {
+          // Mantener la telemetría activa y en tiempo real si el celular está bloqueado o en segundo plano
+          this.isOnline = true;
+        } else {
+          this.isOnline = false;
+        }
 
-        if (this.isOnline && data.pulsoPpm) {
-          this.currentPulse = data.pulsoPpm;
+        if (this.isOnline) {
+          if (this.isHighRisk) {
+            this.isAlertBannerDismissed = false;
+            if (!this.pendingReviewAlert) {
+              const pulse = this.currentPulse;
+              const maxT = this.patient?.frecuenciaMax || 100;
+              const isTaqui = pulse > maxT;
+              const score = this.alertScoreValue;
+              this.pendingReviewAlert = {
+                tipoAlerta: isTaqui ? 'TAQUICARDIA_CRITICA' : 'RIESGO_CARDIOVASCULAR_ALTO',
+                valorRegistrado: `${pulse} BPM`,
+                pulsoPpm: pulse,
+                scoreRiesgo: score,
+                nivelRiesgo: this.liveData?.nivelRiesgo || 'CRITICO',
+                fechaHora: new Date().toISOString(),
+                observacionMedica: isTaqui
+                  ? `La frecuencia cardíaca registrada durante el episodio (${pulse} BPM) superó el umbral clínico máximo (${maxT} BPM). Notificación de auxilio despachada vía WhatsApp.`
+                  : 'El modelo predictivo Voting Ensemble detectó un episodio crítico de riesgo cardiovascular.',
+                atendida: false
+              };
+              this.snapshotRiskPulse = pulse;
+              this.snapshotRiskScore = score;
+            }
+          }
         }
 
         this.cdr.markForCheck();
@@ -1008,24 +1157,295 @@ export class PatientDetailComponent implements OnInit, OnDestroy {
       },
       error: err => {
         console.warn('Error fetching live telemetry:', err);
-        this.isOnline = false;
+        // Si ya hay un pulso activo registrado, no desconectar por fallas de red transitorias
+        if (this.currentPulse <= 0) {
+          this.isOnline = false;
+        }
         this.cdr.markForCheck();
       }
     });
+  }
+
+  loadPatientAlerts(): void {
+    if (!this.patientId) return;
+    this.http.get<any[]>(`${environment.apiUrl}/alertas/paciente/${this.patientId}`).subscribe({
+      next: (alerts) => {
+        if (Array.isArray(alerts) && alerts.length > 0) {
+          if (this.targetAlertId) {
+            const matched = alerts.find(a => a.idAlerta === this.targetAlertId);
+            if (matched) {
+              this.activeCriticalAlert = matched;
+              const match = matched.valorRegistrado ? String(matched.valorRegistrado).match(/\d+/) : null;
+              const pulse = match ? parseInt(match[0], 10) : 110;
+              const score = matched.scoreRiesgo != null ? Number(matched.scoreRiesgo) : 88;
+              const normalizedScore = score <= 1.0 ? Math.round(score * 100) : Math.round(score);
+              this.pendingReviewAlert = {
+                ...matched,
+                pulsoPpm: pulse,
+                scoreRiesgo: normalizedScore,
+                nivelRiesgo: matched.nivelRiesgo || 'CRITICO'
+              };
+              this.snapshotRiskPulse = pulse;
+              this.snapshotRiskScore = normalizedScore;
+              this.cdr.markForCheck();
+              return;
+            }
+          }
+          // Priorizar alertas críticas no atendidas o recientes
+          const critical = alerts.find(a =>
+            (a.tipoAlerta === 'TAQUICARDIA_CRITICA' ||
+             a.tipoAlerta === 'BRADICARDIA_SEVERA' ||
+             a.tipoAlerta === 'RIESGO_CARDIOVASCULAR_ALTO' ||
+             a.tipoAlerta !== 'RITMO_CARDIACO_ESTABLE') && !a.atendida
+          ) || alerts.find(a =>
+            a.tipoAlerta === 'TAQUICARDIA_CRITICA' ||
+            a.tipoAlerta === 'BRADICARDIA_SEVERA' ||
+            a.tipoAlerta === 'RIESGO_CARDIOVASCULAR_ALTO' ||
+            a.tipoAlerta !== 'RITMO_CARDIACO_ESTABLE'
+          );
+          if (critical) {
+            this.activeCriticalAlert = critical;
+            const match = critical.valorRegistrado ? String(critical.valorRegistrado).match(/\d+/) : null;
+            const pulse = match ? parseInt(match[0], 10) : (critical.pulsoPpm || 110);
+            const score = critical.scoreRiesgo != null ? Number(critical.scoreRiesgo) : 88;
+            const normalizedScore = score <= 1.0 ? Math.round(score * 100) : Math.round(score);
+            if (!this.pendingReviewAlert || !this.pendingReviewAlert.idAlerta) {
+              this.pendingReviewAlert = {
+                ...critical,
+                pulsoPpm: pulse,
+                scoreRiesgo: normalizedScore,
+                nivelRiesgo: critical.nivelRiesgo || 'CRITICO'
+              };
+              this.snapshotRiskPulse = pulse;
+              this.snapshotRiskScore = normalizedScore;
+            }
+          }
+        }
+        this.cdr.markForCheck();
+      },
+      error: () => {}
+    });
+  }
+
+  get alertPulseValue(): number {
+    const alert = this.pendingReviewAlert || this.activeCriticalAlert;
+    if (alert) {
+      if (typeof alert.pulsoPpm === 'number' && alert.pulsoPpm > 0) {
+        return alert.pulsoPpm;
+      }
+      if (alert.valorRegistrado) {
+        const match = String(alert.valorRegistrado).match(/\d+/);
+        if (match) {
+          const val = parseInt(match[0], 10);
+          if (val > 0) return val;
+        }
+      }
+    }
+    const maxT = this.patient?.frecuenciaMax || 100;
+    if (this.currentPulse > maxT) {
+      return this.currentPulse;
+    }
+    return this.snapshotRiskPulse || 110;
+  }
+
+  get alertScoreValue(): number {
+    const alert = this.pendingReviewAlert || this.activeCriticalAlert;
+    if (alert && alert.scoreRiesgo != null && Number(alert.scoreRiesgo) > 0) {
+      const s = Number(alert.scoreRiesgo);
+      return s <= 1.0 ? Math.round(s * 100) : Math.round(s);
+    }
+    if (this.liveData?.scoreRiesgo != null && Number(this.liveData.scoreRiesgo) > 0) {
+      const s = Number(this.liveData.scoreRiesgo);
+      return s <= 1.0 ? Math.round(s * 100) : Math.round(s);
+    }
+    return 88;
   }
 
   get isHighRisk(): boolean {
     if (!this.isOnline || !this.currentPulse) return false;
     const maxThresh = this.patient?.frecuenciaMax || 100;
     const minThresh = this.patient?.frecuenciaMin || 60;
+    const isModelRisk = this.liveData?.nivelRiesgo === 'CRITICO' ||
+      (this.liveData?.scoreRiesgo != null && Number(this.liveData.scoreRiesgo) >= 0.75);
 
-    // Si el pulso actual se encuentra dentro del rango de umbrales configurado por el médico, es ESTABLE
-    if (this.currentPulse >= minThresh && this.currentPulse <= maxThresh) {
-      return false;
+    if (this.currentPulse > maxThresh || this.currentPulse < minThresh || isModelRisk) {
+      return true;
     }
+    return false;
+  }
 
-    // Si excede el máximo o cae por debajo del mínimo, es ALTO RIESGO
-    return true;
+  get hasCriticalAlert(): boolean {
+    if (this.isAlertBannerDismissed) return false;
+    if (this.pendingReviewAlert) return true;
+    if (this.activeCriticalAlert) return true;
+    if (this.isHighRisk) return true;
+    if (this.liveData?.nivelRiesgo === 'CRITICO') return true;
+    if (this.currentPulse > (this.patient?.frecuenciaMax || 100)) return true;
+    return false;
+  }
+
+  get criticalAlertTitle(): string {
+    const alert = this.pendingReviewAlert || this.activeCriticalAlert;
+    if (alert?.tipoAlerta) {
+      return alert.tipoAlerta.replace(/_/g, ' ');
+    }
+    if (this.currentPulse > (this.patient?.frecuenciaMax || 100)) {
+      return 'TAQUICARDIA CRÍTICA';
+    }
+    return 'RIESGO CARDIOVASCULAR ALTO';
+  }
+
+  get criticalAlertPulse(): string {
+    const alert = this.pendingReviewAlert || this.activeCriticalAlert;
+    if (alert?.valorRegistrado) {
+      return alert.valorRegistrado;
+    }
+    if (alert?.pulsoPpm) {
+      return `${alert.pulsoPpm} BPM`;
+    }
+    return `${this.alertPulseValue} BPM`;
+  }
+
+  get criticalAlertReason(): string {
+    const alert = this.pendingReviewAlert || this.activeCriticalAlert;
+    if (alert?.observacionMedica) {
+      return alert.observacionMedica;
+    }
+    const pulse = this.alertPulseValue;
+    const maxT = this.patient?.frecuenciaMax || 100;
+    if (pulse > maxT) {
+      return `La frecuencia cardíaca registrada durante el evento (${pulse} BPM) superó el umbral clínico máximo (${maxT} BPM). Notificación de auxilio despachada vía WhatsApp.`;
+    }
+    return 'El modelo predictivo Voting Ensemble detectó un episodio crítico de riesgo cardiovascular.';
+  }
+
+  downloadCriticalAlertPdf(): void {
+    if (this.isDownloadingAlertPdf) return;
+    this.isDownloadingAlertPdf = true;
+
+    Swal.fire({
+      title: 'Generando Informe de Alerta...',
+      text: 'Compilando bioseñales y análisis predictivo en formato PDF',
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
+
+    const docName = this.getDoctorDisplayName();
+    const alertPulse = this.alertPulseValue;
+    const alertScore = this.alertScoreValue;
+    const alertTitle = this.criticalAlertTitle;
+    const maxThresh = this.patient?.frecuenciaMax || 100;
+    const minThresh = this.patient?.frecuenciaMin || 60;
+    const isAbnormal = alertPulse > maxThresh || alertPulse < minThresh;
+
+    // Generar el Informe Clínico Especializado con los valores exactos con los que se generó la alerta
+    this.reportService.generateRiskExplanationPdf({
+      patientName: this.patient ? `${this.patient.nombres} ${this.patient.apellidos}` : 'Paciente',
+      dni: this.patient?.dni || '',
+      edad: this.patient?.edad,
+      genero: this.patient?.genero,
+      imc: this.patient?.imc ? Number(this.patient.imc) : 24.5,
+      currentBpm: alertPulse,
+      riskScore: alertScore,
+      riskClassification: alertTitle,
+      tabaquismo: !!this.patient?.tabaquismo,
+      diabetes: !!this.patient?.diabetes,
+      hipertension: !!this.patient?.hipertension,
+      doctorName: docName,
+      comparisonRows: [
+        {
+          parametro: 'Frecuencia Cardíaca Registrada',
+          valorRegistrado: `${alertPulse} BPM`,
+          limiteSeguro: `${minThresh} - ${maxThresh} BPM`,
+          impacto: isAbnormal ? 'Alto' : 'Bajo'
+        },
+        {
+          parametro: 'Modelo Voting Ensemble',
+          valorRegistrado: `${alertScore}% de Riesgo`,
+          limiteSeguro: '< 50% Riesgo',
+          impacto: alertScore >= 70 ? 'Alto' : 'Moderado'
+        },
+        {
+          parametro: 'Índice de Masa Corporal (IMC)',
+          valorRegistrado: `${this.patient?.imc || 24.5} kg/m²`,
+          limiteSeguro: '< 25.0 kg/m²',
+          impacto: (Number(this.patient?.imc) >= 30) ? 'Alto' : ((Number(this.patient?.imc) >= 25) ? 'Moderado' : 'Bajo')
+        },
+        ...(this.patient?.diabetes ? [{
+          parametro: 'Diabetes Mellitus',
+          valorRegistrado: 'Diagnóstico Positivo',
+          limiteSeguro: 'Sin Comorbilidad',
+          impacto: 'Alto' as const
+        }] : []),
+        ...(this.patient?.hipertension ? [{
+          parametro: 'Hipertensión Arterial',
+          valorRegistrado: 'Diagnóstico Positivo',
+          limiteSeguro: 'Sin Comorbilidad',
+          impacto: 'Moderado' as const
+        }] : []),
+        ...(this.patient?.tabaquismo ? [{
+          parametro: 'Tabaquismo',
+          valorRegistrado: 'Fumador Activo',
+          limiteSeguro: 'No Fumador',
+          impacto: 'Moderado' as const
+        }] : [])
+      ]
+    });
+
+    this.isDownloadingAlertPdf = false;
+    this.hasDoctorDownloadedReport = true;
+    Swal.close();
+    Swal.fire({
+      icon: 'success',
+      title: 'Informe Descargado',
+      text: `Se descargó el informe consolidado de la alerta (${alertPulse} BPM · ${alertScore}% Riesgo).`,
+      timer: 2500,
+      showConfirmButton: false
+    });
+    this.cdr.markForCheck();
+  }
+
+  attendCriticalAlert(idAlerta?: number): void {
+    const targetId = idAlerta || this.activeCriticalAlert?.idAlerta || this.pendingReviewAlert?.idAlerta;
+    if (targetId) {
+      this.http.put(`${environment.apiUrl}/alertas/${targetId}/atender`, { observacionMedica: 'Revisado y evaluado por el cardiólogo en Monitoreo en Vivo' }).subscribe({
+        next: () => {
+          if (this.activeCriticalAlert) {
+            this.activeCriticalAlert.atendida = true;
+          }
+          if (this.pendingReviewAlert) {
+            this.pendingReviewAlert.atendida = true;
+          }
+          this.notificationService.refreshAlerts();
+          Swal.fire({
+            icon: 'success',
+            title: 'Alerta Atendida',
+            text: 'La alerta crítica ha sido marcada como atendida por el cardiólogo.',
+            timer: 2000,
+            showConfirmButton: false
+          });
+          this.cdr.markForCheck();
+        },
+        error: (err) => console.warn('Error atendiendo alerta:', err)
+      });
+    } else {
+      if (this.activeCriticalAlert) this.activeCriticalAlert.atendida = true;
+      if (this.pendingReviewAlert) this.pendingReviewAlert.atendida = true;
+      Swal.fire({
+        icon: 'success',
+        title: 'Alerta Atendida',
+        text: 'La alerta en vivo ha sido marcada como atendida por el cardiólogo.',
+        timer: 2000,
+        showConfirmButton: false
+      });
+      this.cdr.markForCheck();
+    }
+  }
+
+  dismissAlertBanner(): void {
+    this.isAlertBannerDismissed = true;
+    this.pendingReviewAlert = null;
+    this.cdr.markForCheck();
   }
 
   // Generación Fisiológica de ECG/PPG (Onda Cardíaca P-Q-R-S-T Realista)

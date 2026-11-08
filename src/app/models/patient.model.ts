@@ -18,9 +18,7 @@ export interface Patient {
   consumoAlcohol?: boolean;
   diabetes?: boolean;
   antecedentesCv?: boolean;
-  usoMedicacion?: boolean;
   hipertension?: boolean;
-  tiroides?: boolean;
   acv?: boolean;
   frecuenciaMin: number;
   frecuenciaMax: number;
@@ -44,11 +42,9 @@ export interface PatientCreateRequest {
   tabaquismo?: boolean;
   consumoAlcohol?: boolean;
   antecedentesCv?: boolean;
-  usoMedicacion?: boolean;
   diabetes?: boolean;
   hipertension?: boolean;
   acv?: boolean;
-  tiroides?: boolean;
   frecuenciaMin?: number;
   frecuenciaMax?: number;
   presionSisMax?: number;

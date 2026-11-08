@@ -85,7 +85,6 @@ describe('NewPatientModalComponent', () => {
     component.edad = 38;
     component.pesoKg = 82;
     component.tallaCm = 174;
-    component.obesidad = true;
     component.diabetes = true;
 
     component.submitPatient();
@@ -97,8 +96,24 @@ describe('NewPatientModalComponent', () => {
       edad: 38,
       pesoKg: 82,
       tallaCm: 174,
-      obesidad: true,
       diabetes: true
     }));
+  });
+
+  it('should automatically compute IMC and detect obesity when IMC >= 30', () => {
+    component.pesoKg = 100;
+    component.tallaCm = 170;
+
+    // IMC = 100 / (1.7 * 1.7) = 34.6 >= 30
+    expect(component.calculatedImc).toBe(34.6);
+    expect(component.isObese).toBe(true);
+    expect(component.obesidad).toBe(true);
+
+    component.pesoKg = 70;
+    component.tallaCm = 175;
+    // IMC = 70 / (1.75 * 1.75) = 22.9 < 30
+    expect(component.calculatedImc).toBe(22.9);
+    expect(component.isObese).toBe(false);
+    expect(component.obesidad).toBe(false);
   });
 });

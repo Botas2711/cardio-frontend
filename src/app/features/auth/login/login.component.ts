@@ -149,17 +149,6 @@ const DEFAULT_LOGIN_ERROR_MESSAGE = 'Credenciales incorrectas';
               </button>
             </div>
           </form>
-
-          <!-- Acceso rápido para pruebas clínicas (Discreto para desarrollo y evaluación) -->
-          <footer class="mt-8 pt-5 border-t border-slate-100 text-center">
-            <button
-              type="button"
-              (click)="fillDemoCredentials()"
-              class="text-xs text-slate-400 hover:text-[#E11D48] transition"
-            >
-              Completar datos de prueba: agustinalex14&#64;gmail.com
-            </button>
-          </footer>
         </div>
       </main>
     </div>

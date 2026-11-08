@@ -34,7 +34,7 @@ import { LoadingSpinnerComponent } from '../../../shared/components/loading-spin
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
               <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                Conformidad del Protocolo Clínico (HU023)
+                Conformidad del Protocolo Clínico
               </h3>
               <p class="text-xs text-slate-500">{{ conformity.mensaje }}</p>
             </div>
@@ -73,7 +73,7 @@ import { LoadingSpinnerComponent } from '../../../shared/components/loading-spin
       <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
         <div class="pb-3 border-b border-slate-100 mb-4">
           <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider">
-            Auditoría de Tiempos de Espera y Cuellos de Botella (HU022)
+            Auditoría de Tiempos de Espera y Cuellos de Botella
           </h3>
           <p class="text-xs text-slate-500">Duración promedio entre etapas asistenciales calculadas con PM4Py</p>
         </div>

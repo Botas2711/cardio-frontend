@@ -19,7 +19,7 @@ import { DataSet } from 'vis-data';
           Total de casos analizados: <span class="font-bold font-mono">{{ processMap?.totalCasos || 0 }}</span>
         </div>
         <div class="flex items-center space-x-2">
-          <span class="text-xs font-semibold text-slate-500">Filtrar flujo por riesgo (HU024):</span>
+          <span class="text-xs font-semibold text-slate-500">Filtrar flujo por riesgo:</span>
           <select
             [(ngModel)]="filtroRiesgo"
             (change)="loadProcessMap()"

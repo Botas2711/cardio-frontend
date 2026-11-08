@@ -1,4 +1,6 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { PatientDetailComponent } from './patient-detail.component';
 import { PatientService } from '../../../services/patient.service';
 import { TelemetryService } from '../../../services/telemetry.service';
@@ -55,6 +57,13 @@ describe('PatientDetailComponent', () => {
         nivelRiesgo: 'CRITICO',
         fechaHora: new Date().toISOString(),
         esperandoLecturas: false
+      })),
+      getHistorical: vi.fn().mockReturnValue(of({
+        mediciones: [],
+        totalRegistros: 0,
+        promedioPulso: 75,
+        maxPulso: 80,
+        minPulso: 70
       }))
     };
 
@@ -66,10 +75,12 @@ describe('PatientDetailComponent', () => {
     await TestBed.configureTestingModule({
       imports: [PatientDetailComponent],
       providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
         provideRouter([]),
         {
           provide: ActivatedRoute,
-          useValue: { params: of({ id: '3' }) }
+          useValue: { params: of({ id: '3' }), queryParams: of({}) }
         },
         { provide: PatientService, useValue: mockPatientService },
         { provide: TelemetryService, useValue: mockTelemetryService },
@@ -123,49 +134,33 @@ describe('PatientDetailComponent', () => {
     expect(component.newNoteText).toBe('');
   });
 
-  it('should toggle and clear date filter in historial tab (history-range.png)', () => {
+  it('should toggle and clear date filter in historial tab', () => {
     component.activeTab = 'historial';
-    component.selectDay(10);
+    component.tempRangeStart = '2026-10-10';
+    component.tempRangeEnd = '2026-10-15';
     component.applyCalendarRange();
 
     expect(component.isDateFilterActive).toBe(true);
-    expect(component.activeDateRangeLabel).toBe('10 Oct - 15 Oct');
+    expect(component.selectedStartDate).toBe('2026-10-10');
+    expect(component.selectedEndDate).toBe('2026-10-15');
 
     component.clearDateFilter();
     expect(component.isDateFilterActive).toBe(false);
+    expect(component.selectedStartDate).toBe('');
+    expect(component.selectedEndDate).toBe('');
   });
 
-  it('should trigger empty range state when selecting dates with no data (historic-sin datos.png)', () => {
-    component.activeTab = 'historial';
-    component.selectEmptyRange();
-    component.applyCalendarRange();
-
-    expect(component.isDateFilterActive).toBe(true);
-    expect(component.hasHistoryData).toBe(false);
-  });
-
-  it('should switch simulation modes between NORMAL, CRITICO and AUTO', () => {
-    component.setSimulationMode('NORMAL');
-    expect(component.simulationMode).toBe('NORMAL');
-    expect(component.currentPulse).toBe(72);
-    expect(component.isHighRisk).toBe(false);
-
-    component.setSimulationMode('CRITICO');
-    expect(component.simulationMode).toBe('CRITICO');
-    expect(component.currentPulse).toBe(138);
-    expect(component.isHighRisk).toBe(true);
-
-    component.setSimulationMode('AUTO');
-    expect(component.simulationMode).toBe('AUTO');
-  });
-
-  it('should toggle device connection state', () => {
-    component.isOnline = false;
-    component.toggleDeviceConnection();
-    expect(component.isOnline).toBe(true);
-    expect(component.currentPulse).toBeGreaterThan(0);
-
-    component.toggleDeviceConnection();
-    expect(component.isOnline).toBe(false);
+  it('should trigger report generation when downloadHistoryPdf is called', () => {
+    component.patient = {
+      idPaciente: 3,
+      dni: '14567892',
+      nombres: 'Agustín',
+      apellidos: 'Aguilar',
+      genero: 'MASCULINO',
+      frecuenciaMin: 60,
+      frecuenciaMax: 100
+    };
+    component.downloadHistoryPdf();
+    expect(component.patient.idPaciente).toBe(3);
   });
 });

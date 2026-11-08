@@ -33,10 +33,10 @@ import { SettingsService } from '../../../core/services/settings.service';
         <!-- Botón de Acción Abrir y Cerrar -->
         <div class="flex items-center space-x-2 shrink-0">
           <button
-            (click)="goToPatient(alert.idPaciente)"
+            (click)="goToPatient(alert.idPaciente, alert.idAlerta)"
             class="bg-brand hover:bg-brand-dark text-white text-xs font-bold px-4 py-2 rounded-xl shadow-md transition active:scale-95"
           >
-            Abrir
+            Ver
           </button>
           <button
             (click)="dismissBanner()"
@@ -149,7 +149,7 @@ import { SettingsService } from '../../../core/services/settings.service';
                       </div>
 
                       <button
-                        (click)="goToPatient(alert.idPaciente); $event.stopPropagation()"
+                        (click)="goToPatient(alert.idPaciente, alert.idAlerta); $event.stopPropagation()"
                         class="ml-2 px-3 py-1 bg-white group-hover:bg-brand group-hover:text-white border border-slate-200 group-hover:border-transparent text-xs font-bold text-slate-700 rounded-lg shadow-2xs transition"
                       >
                         Ver
@@ -250,10 +250,12 @@ export class NavbarComponent {
     this.notificationService.dismissBanner();
   }
 
-  goToPatient(patientId: number): void {
+  goToPatient(patientId: number, alertId?: number): void {
     this.showAlertDropdown = false;
     this.notificationService.dismissBanner();
-    this.router.navigate(['/live-monitoring', patientId]);
+    this.router.navigate(['/live-monitoring', patientId], {
+      queryParams: alertId ? { alertaId: alertId } : {}
+    });
   }
 }
 

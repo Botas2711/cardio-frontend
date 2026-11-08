@@ -271,7 +271,7 @@ export class ReportService {
 
     // Filas cronológicas de mediciones históricas
     const rowsHtml = data.records.map(r => {
-      const isAlerta = r.esAlerta || r.pulsoPpm > 100;
+      const isAlerta = Boolean(r.esAlerta || r.pulsoPpm > 100);
       return `
         <tr style="border-bottom: 1px solid #f1f5f9;">
           <td style="padding: 8px 12px; font-weight: 700; color: #334155;">${r.label} 2026</td>
@@ -296,10 +296,11 @@ export class ReportService {
         `).join('')
       : '<div style="font-size: 11px; color: #64748b; font-style: italic;">Sin notas clínicas adicionales en el período.</div>';
 
-    // Gráfico de barras SVG embebido para visualizar la tendencia histórica
+    // Gráfico de barras SVG embebido para visualizar la tendencia histórica (consistencia estricta 1 a 1 con tabla de detalle)
     const chartBars = data.records.map((r, i) => {
+      const isAlerta = Boolean(r.esAlerta || r.pulsoPpm > 100);
       const height = Math.min(90, Math.max(25, Math.round(((r.pulsoPpm - 40) / 120) * 85)));
-      const color = r.esAlerta ? '#E11D48' : '#3B82F6';
+      const color = isAlerta ? '#E11D48' : '#3B82F6';
       const x = 30 + i * 48;
       const y = 110 - height;
       return `
@@ -308,6 +309,9 @@ export class ReportService {
         <text x="${x + 12}" y="125" font-size="9" font-weight="600" fill="#64748b" text-anchor="middle">${r.label.split(' ')[0]}</text>
       `;
     }).join('');
+
+    const totalRiskRecords = data.records.filter(r => Boolean(r.esAlerta || r.pulsoPpm > 100)).length;
+    const effectiveAlertsCount = Math.max(data.alertsCount, totalRiskRecords);
 
     const html = `
       <!DOCTYPE html>
@@ -365,7 +369,7 @@ export class ReportService {
           </div>
           <div class="stat-card" style="border-color: #fecdd3; background: #fff1f2;">
             <span style="font-size: 10px; font-weight: 800; color: #E11D48; text-transform: uppercase; display: block;">Alertas de Riesgo</span>
-            <div style="font-size: 22px; font-weight: 900; color: #E11D48; font-family: monospace;">${data.alertsCount} <span style="font-size: 10px; font-weight: 700;">REGISTRADAS</span></div>
+            <div style="font-size: 22px; font-weight: 900; color: #E11D48; font-family: monospace;">${effectiveAlertsCount} <span style="font-size: 10px; font-weight: 700;">REGISTRADAS</span></div>
           </div>
         </div>
 
